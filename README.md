@@ -48,7 +48,7 @@
     <li>
       <a href="#about-the-project">About The Project</a>
       <ul>
-        <li><a href="#docker-based-one-click-mailu-mail-server:-simplify-your-email-hosting">Docker Based One-Click Mailu Mail Server: Simplify Your Email Hosting</a></li>
+        <li><a href="#docker-based-one-click-mailu-mail-server-simplify-your-email-hosting">Docker Based One-Click Mailu Mail Server: Simplify Your Email Hosting</a></li>
         <li><a href="#benefits">Benefits</a></li>
         <li><a href="#mailu-features">Mailu Features</a></li>
       </ul>
