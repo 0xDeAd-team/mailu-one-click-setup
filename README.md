@@ -57,9 +57,12 @@
       <a href="#instruction">Instruction</a>
       <ul>
         <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#config-dns-record">Config DNS record</a></li>
+        <li><a href="#config-hnsd-for-dns-resolution">Config HNSD for DNS resolution</a></li>
         <li><a href="#run-the-mail-server">Run the mail server</a></li>
       </ul>
     </li>
+    <li><a href="#usage">Usage</a></li>
     <li><a href="#contributing">Contributing</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
@@ -104,7 +107,8 @@ This tutorial is written for Ubuntu22.04 LTS operating system. For other systems
 
 - A Ubuntu22.04 server with following tools installed  
 
-- `docker` to run the mail server inside containers
+- `docker`
+to run the mail server inside containers
 
   ```sh
   curl -fsSL https://get.docker.com -o get-docker.sh
@@ -118,22 +122,78 @@ This tutorial is written for Ubuntu22.04 LTS operating system. For other systems
   sudo systemctl enable containerd.service
   ```
 
-- `yq` to modify the yaml config file
+- `yq`
+to modify the yaml config file
 
   ```sh
   wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq &&\
     chmod +x /usr/bin/yq
   ```
 
-- `openssl` to generate self-signed certificate
+- `openssl`
+to generate self-signed certificate
 
   ```sh
   sudo apt install openssl
   ```
 
+### Config DNS record
+
+Go to [Namebase](https://namebase.io) to config your DNS record
+
+**Blockchain DNS records (On-chain record)**  
+Handshake allows a limited set of DNS record types on chain.
+
+- Make sure to enable DNSSEC for your domain and Namebase will automaticcaly add 3 DS records
+
+- To use Namebase's nameservers, create an NS record in the blockchain section with a "Name" of "ns1" and a "Value" of "44.231.6.183"
+
+![dns-onchain](assets/dns-onchain.png)
+
+**Namebase nameserver DNS records (Off-chain record)**  
+
+- Add an A record for your mail server
+- Add an MX record for your mail domain
+
+![dns-server](assets/dns-server.png)
+
+- For HTTPS certificate validation, add TLSA record for your domain
+
+![dns-tlsa](assets/dns-tlsa.png)
+
+### Config [HNSD](https://github.com/handshake-org/hnsd) for DNS resolution
+
+1. Run HNSD
+using docker (optional)
+
+  ```sh
+  docker run -d --name hnsd --restart always -p 53:53/udp namebasehq/hnsd "/opt/hnsd/dist/hnsd" -p 4 -r 127.0.0.1:53
+  ```
+
+2. Add the following line to the top of the `/etc/resolv.conf` file
+
+Using your own HNSD server
+
+  ```sh
+  nameserver 127.0.0.1
+  ```
+
+Or using public HNSD server
+
+  ```sh
+  nameserver 103.196.38.38
+  nameserver 103.196.38.39
+  ```
+
+It took a while for HNSD to finish running. You can ping a Handshake domain to check everything is working properly
+
+  ```sh
+  ping your.domain
+  ```
+
 ### Run the mail server
 
-1. Clone the repo
+1. Clone the repository
 
     ```sh
     git clone https://github.com/0xDeAd-team/instruction.git
@@ -163,7 +223,18 @@ This tutorial is written for Ubuntu22.04 LTS operating system. For other systems
    ./setup.sh
    ```
 
-### Config DNS record
+And wait a few seconds. You can get this login web page when your server is ready
+![sample](assets/sample.png)
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Usage
+
+- **To send and receive email from others HandShake domain mail servers, both 2 servers need to set up HNSD to resolve DNS.**
+![Cross Domain Mail](/assets/cross-domain.png)
+
+- **To use E2E encryption, go to webmail client settings and create your PGP keys. Remember that if you want to send encrypted mail for some one, you need to have his public key first to encrypt the mail.**
+![E2E Keys](/assets/e2e-keys.png)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -196,8 +267,6 @@ Project Link: [https://github.com/0xDeAd-team/instruction](https://github.com/0x
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-<!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 [contributors-shield]: https://img.shields.io/github/contributors/0xDeAd-team/instruction.svg?style=for-the-badge
 [contributors-url]: https://github.com/0xDeAd-team/instruction/graphs/contributors
 [forks-shield]: https://img.shields.io/github/forks/0xDeAd-team/instruction.svg?style=for-the-badge
