@@ -1,0 +1,384 @@
+# Basic configuration
+user nginx;
+worker_processes auto;
+pcre_jit on;
+error_log /dev/stderr notice;
+pid /var/run/nginx.pid;
+load_module "modules/ngx_mail_module.so";
+load_module "modules/ngx_stream_module.so";
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    # Standard HTTP configuration with slight hardening
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
+    server_tokens off;
+    absolute_redirect off;
+    resolver 127.0.0.11 valid=30s;
+
+
+    # Header maps
+    map $http_x_forwarded_proto $proxy_x_forwarded_proto {
+        default $http_x_forwarded_proto;
+        '' $scheme;
+    }
+    map $uri $expires {
+        default off;
+        ~*\.(ico|css|js|gif|jpeg|jpg|png|woff2?|ttf|otf|svg|tiff|eot|webp)$ 97d;
+    }
+
+    map $request_uri $loggable {
+        /health 0;
+        /auth/email 0;
+        default 1;
+    }
+    access_log /dev/stdout combined if=$loggable;
+
+    # compression
+    gzip on;
+    gzip_static on;
+    gzip_types text/plain text/css application/xml application/javascript
+    gzip_min_length 1024;
+    # TODO: figure out how to server pre-compressed assets from admin container
+
+
+    # Main HTTP server
+    server {
+        # Favicon stuff
+        root /static;
+        # Variables for proxifying
+        set $admin admin:8080;
+        set $antispam antispam:11334;
+
+        set $webmail webmail;
+
+
+        set $webdav webdav:5232;
+
+        client_max_body_size 58388608;
+
+        # Only enable HTTPS if TLS is enabled with no error and not on kubernetes
+
+        listen 443 ssl http2;
+
+
+        include /etc/nginx/tls.conf;
+        ssl_stapling on;
+        ssl_stapling_verify on;
+        ssl_session_cache shared:SSLHTTP:3m;
+        add_header Strict-Transport-Security 'max-age=31536000';
+
+
+        if ($proxy_x_forwarded_proto = http) {
+            return 301 https://$host$request_uri;
+        }
+
+
+        # Only enable HTTPS if TLS is enabled with no error and not on kubernetes
+        # Remove headers to prevent duplication and information disclosure
+        proxy_hide_header X-XSS-Protection;
+        proxy_hide_header X-Powered-By;
+
+        add_header X-Frame-Options 'SAMEORIGIN';
+        add_header X-Content-Type-Options 'nosniff';
+        add_header X-Permitted-Cross-Domain-Policies 'none';
+        add_header Referrer-Policy 'same-origin';
+
+        # mozilla autoconfiguration
+        location ~ ^/(\.well\-known/autoconfig/)?mail/config\-v1\.1\.xml {
+            rewrite ^ /internal/autoconfig/mozilla break;
+            include /etc/nginx/proxy.conf;
+            proxy_pass http://$admin;
+        }
+        # microsoft autoconfiguration
+        location ~* ^/Autodiscover/Autodiscover.json {
+            rewrite ^ /internal/autoconfig/microsoft.json break;
+            include /etc/nginx/proxy.conf;
+            proxy_pass http://$admin;
+        }
+        location ~* ^/Autodiscover/Autodiscover.xml {
+            rewrite ^ /internal/autoconfig/microsoft break;
+            include /etc/nginx/proxy.conf;
+            proxy_pass http://$admin;
+        }
+        # apple mobileconfig
+        location ~ ^/(apple\.)?mobileconfig {
+            rewrite ^ /internal/autoconfig/apple break;
+            include /etc/nginx/proxy.conf;
+            proxy_pass http://$admin;
+        }
+
+
+        # If TLS is failing, prevent access to anything except certbot
+        include /overrides/*.conf;
+
+        # Actual logic
+
+        location ~ ^/(sso|static)/ {
+            include /etc/nginx/proxy.conf;
+            proxy_pass http://$admin;
+        }
+
+
+        location @sso_login {
+            return 302 /sso/login?url=$request_uri;
+        }
+
+
+        location / {
+            expires $expires;
+
+            try_files $uri /webmail?homepage;
+
+        }
+
+
+        location /webmail {
+
+            rewrite ^(/webmail)$ $1/ permanent;
+            rewrite ^/webmail/(.*) /$1 break;
+
+            include /etc/nginx/proxy.conf;
+            auth_request /internal/auth/user;
+            error_page 403 @sso_login;
+            proxy_pass http://$webmail;
+        }
+
+
+        location /webmail/sso.php {
+
+
+            rewrite ^(/webmail)$ $1/ permanent;
+            rewrite ^/webmail/(.*) /$1 break;
+
+            include /etc/nginx/proxy.conf;
+            auth_request /internal/auth/user;
+            auth_request_set $user $upstream_http_x_user;
+            auth_request_set $token $upstream_http_x_user_token;
+            proxy_set_header X-Remote-User $user;
+            proxy_set_header X-Remote-User-Token $token;
+            error_page 403 @sso_login;
+            proxy_pass http://$webmail;
+        }
+
+
+        location /admin {
+            include /etc/nginx/proxy.conf;
+            proxy_pass http://$admin;
+            expires $expires;
+        }
+
+        location /admin/antispam {
+            rewrite ^/admin/antispam/(.*) /$1 break;
+            auth_request /internal/auth/admin;
+            proxy_set_header X-Real-IP "";
+            proxy_set_header X-Forwarded-For "";
+            proxy_set_header X-Forwarded-By: "";
+            proxy_pass http://$antispam;
+            error_page 403 @sso_login;
+        }
+
+
+        location /webdav {
+            rewrite ^/webdav/(.*) /$1 break;
+            auth_request /internal/auth/basic;
+            auth_request_set $user $upstream_http_x_user;
+            include /etc/nginx/proxy.conf;
+            proxy_set_header X-Remote-User $user;
+            proxy_set_header X-Script-Name /webdav;
+            proxy_pass http://$webdav;
+        }
+
+        location ~ ^/.well-known/(carddav|caldav) {
+            return 301 /webdav/;
+        }
+
+
+        location ~ /api {
+            include /etc/nginx/proxy.conf;
+            proxy_pass http://$admin;
+        }
+
+
+        location /internal {
+            internal;
+
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header Authorization $http_authorization;
+            proxy_pass_header Authorization;
+            proxy_pass http://$admin;
+            proxy_pass_request_body off;
+            proxy_set_header Content-Length "";
+        }
+
+        location /health {
+            return 204;
+        }
+    }
+
+    # Forwarding authentication server
+    server {
+        # Variables for proxifying
+        set $admin admin:8080;
+
+        listen 127.0.0.1:8000;
+
+        location / {
+            proxy_pass http://$admin/internal$request_uri;
+        }
+    }
+
+    # Healthcheck over localhost, for docker
+    server {
+        listen 127.0.0.1:10204;
+        location /health {
+            return 204;
+        }
+    }
+
+    include /etc/nginx/conf.d/*.conf;
+}
+
+stream {
+    log_format main '$remote_addr [$time_local] '
+    '$protocol $status $bytes_sent $bytes_received '
+    '$session_time "$upstream_addr" '
+    '"$upstream_bytes_sent" "$upstream_bytes_received" "$upstream_connect_time"';
+    access_log /dev/stdout main;
+
+    # managesieve
+    server {
+        listen 14190;
+        resolver 127.0.0.11 valid=30s;
+
+        proxy_connect_timeout 1s;
+        proxy_timeout 1m;
+        proxy_protocol on;
+        proxy_pass imap:4190;
+    }
+}
+
+mail {
+    server_name TEMPLATE_HOSTNAMES;
+    auth_http http://127.0.0.1:8000/auth/email;
+    proxy_pass_error_message on;
+    resolver 127.0.0.11 valid=30s;
+    error_log /dev/stderr info;
+
+    include /etc/nginx/tls.conf;
+    ssl_session_cache shared:SSLMAIL:3m;
+
+    # Advertise real capabilities of backends (postfix/dovecot)
+    smtp_capabilities PIPELINING "SIZE 50000000" ETRN ENHANCEDSTATUSCODES 8BITMIME DSN;
+    pop3_capabilities TOP UIDL RESP-CODES PIPELINING AUTH-RESP-CODE USER;
+    imap_capabilities IMAP4 IMAP4rev1 UIDPLUS SASL-IR LOGIN-REFERRALS ENABLE IDLE LITERAL+;
+
+    # Default SMTP server for the webmail (no encryption, but authentication)
+    server {
+        listen 10025;
+        protocol smtp;
+        smtp_auth plain;
+        auth_http_header Auth-Port 10025;
+    }
+
+    # Default IMAP server for the webmail (no encryption, but authentication)
+    server {
+        listen 10143;
+        protocol imap;
+        smtp_auth plain;
+        auth_http_header Auth-Port 10143;
+        # ensure we talk HAPROXY protocol to the backends
+        proxy_protocol on;
+    }
+
+    # SMTP is always enabled, to avoid losing emails when TLS is failing
+    server {
+      listen 25;
+
+      ssl_certificate /etc/ssl/cert.crt;
+      ssl_certificate_key /etc/ssl/cert.key;
+
+
+      ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+      ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA256:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:DES-CBC3-SHA;
+      ssl_prefer_server_ciphers on;
+
+      starttls on;
+
+      protocol smtp;
+      smtp_auth none;
+      auth_http_header Auth-Port 25;
+    }
+
+    # All other protocols are disabled if TLS is failing
+
+    server {
+      listen 143;
+
+      starttls only;
+
+      protocol imap;
+      imap_auth plain;
+      auth_http_header Auth-Port 143;
+      # ensure we talk HAPROXY protocol to the backends
+      proxy_protocol on;
+    }
+
+    server {
+      listen 110;
+
+
+      starttls only;
+
+      protocol pop3;
+      pop3_auth plain;
+      auth_http_header Auth-Port 110;
+      # ensure we talk HAPROXY protocol to the backends
+      proxy_protocol on;
+    }
+
+    server {
+      listen 587;
+
+
+      starttls only;
+
+      protocol smtp;
+      smtp_auth plain login;
+      auth_http_header Auth-Port 587;
+    }
+
+
+    server {
+      listen 465 ssl;
+
+      protocol smtp;
+      smtp_auth plain login;
+      auth_http_header Auth-Port 465;
+    }
+
+    server {
+      listen 993 ssl;
+
+      protocol imap;
+      imap_auth plain;
+      auth_http_header Auth-Port 993;
+      # ensure we talk HAPROXY protocol to the backends
+      proxy_protocol on;
+    }
+
+    server {
+      listen 995 ssl;
+
+      protocol pop3;
+      pop3_auth plain;
+      auth_http_header Auth-Port 995;
+      # ensure we talk HAPROXY protocol to the backends
+      proxy_protocol on;
+    }
+}

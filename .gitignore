@@ -1,0 +1,16 @@
+# Certificates
+cert.*
+
+# TLSA Records
+tlsa
+
+# Docker Compose
+docker-compose.yml
+
+# Environment variables
+mailu.env
+
+# Nginx Configuration
+nginx.conf
+
+
