@@ -44,6 +44,8 @@ HNS_DNS="103.196.38.38"
 
 # Generate Nginx Configuration
 sed -e "s/$TEMPLATE_DOMAIN/$DOMAIN/g" -e "s/$TEMPLATE_HOSTNAMES/$HOSTNAMES/g" nginx.conf.template > $WORKING_DIR/nginx.conf
+cp tls.conf $WORKING_DIR/tls.conf
+cp proxy.conf $WORKING_DIR/proxy.conf
 
 # Check if nginx.conf generation was successful
 if [ $? -ne 0 ]; then
@@ -115,8 +117,7 @@ wget 'https://setup.mailu.io/2.0/file/'$UUID'/mailu.env' -O $WORKING_DIR/mailu.e
 FILTER=".services.[].dns |= . + [\"$HNS_DNS\"]" 
 FILTER+=" | .services.admin.dns |= . - [\"$HNS_DNS\"]"
 
-FILTER+=" | .services.front.volumes += [\"$(pwd)/cert.crt:/etc/ssl/cert.crt:ro\", \"$(pwd)/cert.key:/etc/ssl/cert.key:ro\", \"$(pwd)/nginx.conf:/etc/nginx/nginx1.conf:ro\", \"$(pwd)/tls.conf:/etc/nginx/tls1.conf:ro\"]"  # Add volumes for front service
-FILTER+=" | .services.front.command = [\"/bin/sh\", \"-c\", \"/start.py & sleep 20 && cd /etc/nginx/ && rm nginx.conf && cp nginx1.conf nginx.conf && rm tls.conf && cp tls1.conf tls.conf && nginx -s reload && sleep infinity\"]"  # Update front service command
+FILTER+=" | .services.front.volumes += [\"$WORKING_DIR/cert.crt:/etc/ssl/cert.crt:ro\", \"$WORKING_DIR/cert.key:/etc/ssl/cert.key:ro\", \"$WORKING_DIR/nginx.conf:/etc/nginx/nginx.conf:ro\", \"$WORKING_DIR/tls.conf:/etc/nginx/tls.conf:ro\", \"$WORKING_DIR/proxy.conf:/etc/nginx/proxy.conf:ro\"]"  # Add volumes for front service
 
 yq -r "$FILTER" $WORKING_DIR/docker-compose.tmp > $WORKING_DIR/docker-compose.yml
 
