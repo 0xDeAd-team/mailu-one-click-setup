@@ -3,31 +3,57 @@
 # Load environment variables from .bashrc (modify the path if needed)
 source ~/.bashrc
 
-UUID=isdofgjsklgjklsjdg
+# Check yq installation
+yq >/dev/null 2>&1 || { echo "yq tool is not installed. Please install yq"; exit 1; }
 
-echo 'https://setup.mailu.io/2.0/file/'$UUID'/docker-compose.yml'
+# Check openssl installation
+openssl >/dev/null 2>&1 || { echo "openssl is not installed. Please install openssl"; exit 1; }
+
+# Check docker installation
+docker >/dev/null 2>&1 || { echo "docker is not installed. Please install docker"; exit 1; }
+
+# Check docker compose installation
+docker compose >/dev/null 2>&1 || { echo "docker compose is not installed. Please install docker compose"; exit 1; }
 
 
 # Check if required environment variables are set
-if [ -z "$DOMAIN" ] || [ -z "$HOSTNAMES" ] || [ -z "$LISTEN_ADDRESS" ]; then
-  echo "Error: Please set DOMAIN and HOSTNAMES and LISTEN_ADDRESS environment variables (e.g., export DOMAIN=your_domain_name)"
+if [ -z "$WORKING_DIR" ] || [ -z "$DOMAIN" ] || [ -z "$HOSTNAMES" ] || [ -z "$API_KEY" ] || [ -z "$LISTEN_ADDRESS" ] || [ -z "$ADMIN_PASSWORD" ]; then
+  echo "Error: Please set WORKING_DIR, DOMAIN, HOSTNAMES, API_KEY, LISTEN_ADDRESS and ADMIN_PASSWORD environment variables 
+  (e.g., export DOMAIN=0xdead.invincibility HOSTNAMES=mail.0xdead.invincibility API_KEY=THISISAPIKEY LISTEN_ADDRESS=127.0.0.1 WORKING_DIR=~/mailu ADMIN_PASSWORD=123456)"
   exit 1
 fi
+
+# Define working directory
+WORKING_DIR=$WORKING_DIR/mailu
+
+# Check if working directory exists, remove it if it does
+if [ -d "$WORKING_DIR" ]; then
+  rm -rf $WORKING_DIR
+fi
+
+# Create new working directory
+mkdir $WORKING_DIR
+
+# Convert working directory to URI format
+WORKING_DIR_URI=$(echo "$WORKING_DIR" | yq @uri)
 
 # Define template variables
 TEMPLATE_DOMAIN="TEMPLATE_DOMAIN"
 TEMPLATE_HOSTNAMES="TEMPLATE_HOSTNAMES"
-TEMPLATE_LISTEN_ADDRESS="TEMPLATE_LISTEN_ADDRESS"
 HNS_DNS="103.196.38.38"
-API_KEY="HRUUKIY6X9PFBPC6SDXLZL9AUXYGDGLK"
 
 # Generate Nginx Configuration
-sed -e "s/$TEMPLATE_DOMAIN/$DOMAIN/g" -e "s/$TEMPLATE_HOSTNAMES/$HOSTNAMES/g" nginx.conf.template > nginx.conf
+sed -e "s/$TEMPLATE_DOMAIN/$DOMAIN/g" -e "s/$TEMPLATE_HOSTNAMES/$HOSTNAMES/g" nginx.conf.template > $WORKING_DIR/nginx.conf
+
+# Check if nginx.conf generation was successful
+if [ $? -ne 0 ]; then
+  echo "Error: Failed to generate nginx.conf"
+  exit 1
+fi
 
 # Generate Self-Signed Certificate and DANE TLSA Record
-
 openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
-  -keyout cert.key -out cert.crt -extensions ext  -config \
+  -keyout $WORKING_DIR/cert.key -out $WORKING_DIR/cert.crt -extensions ext -config \
   <(echo "[req]";
     echo distinguished_name=req;
     echo "[ext]";
@@ -37,7 +63,7 @@ openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
     echo "subjectAltName=DNS:$DOMAIN,DNS:*.$DOMAIN";
     ) -subj "/CN=*.$DOMAIN"
 
-echo -n "3 1 1 " > tlsa && openssl x509 -in cert.crt -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | xxd  -p -u -c 32 >> tlsa
+echo "3 1 1 $(openssl x509 -in $WORKING_DIR/cert.crt -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | xxd  -p -u -c 32)" >> $WORKING_DIR/tlsa
 
 # Check if certificate generation was successful
 if [ $? -ne 0 ]; then
@@ -64,7 +90,7 @@ curl 'https://setup.mailu.io/2.0/submit' \
   -H 'sec-fetch-user: ?1' \
   -H 'upgrade-insecure-requests: 1' \
   -H 'user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0' \
-  --data-raw 'flavor=compose&root=%2Fmailu&domain='$DOMAIN'&postmaster=admin&tls_flavor=notls&auth_ratelimit_ip=5&auth_ratelimit_user=50&message_ratelimit_pd=200&site_name=Mailu&website=https%3A%2F%2Fmailu.io&admin_enabled=true&api_enabled=true&api_token='$API_KEY'&webmail_type=roundcube&antivirus_enabled=clamav&webdav_enabled=radicale&fetchmail_enabled=true&oletools_enabled=true&bind4='$LISTEN_ADDRESS'&subnet=192.168.203.0%2F24&bind6=%3A%3A1&subnet6=fdcf%3Ab3ab%3Acf6e%3Abeef%3A%3A%2F64&resolver_enabled=true&hostnames='$HOSTNAMES'' > html.tmp
+  --data-raw 'flavor=compose&root='$WORKING_DIR_URI'&domain='$DOMAIN'&postmaster=admin&tls_flavor=notls&auth_ratelimit_ip=5&auth_ratelimit_user=50&message_ratelimit_pd=200&site_name=Mailu&website=https%3A%2F%2Fmailu.io&admin_enabled=true&api_enabled=true&api_token='$API_KEY'&webmail_type=roundcube&antivirus_enabled=clamav&webdav_enabled=radicale&fetchmail_enabled=true&oletools_enabled=true&bind4='$LISTEN_ADDRESS'&subnet=192.168.203.0%2F24&bind6=%3A%3A1&subnet6=fdcf%3Ab3ab%3Acf6e%3Abeef%3A%3A%2F64&resolver_enabled=true&hostnames='$HOSTNAMES'' > html.tmp
 
 # Extract the UUID using grep
 UUID=$(grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' html.tmp | head -1)
@@ -80,25 +106,26 @@ fi
 # Clean up temporary file (optional)
 rm html.tmp
 
-# Create working directory
-rm -rf /mailu
-mkdir /mailu
-cd /mailu
-
 # Get Mailu Docker Compose and Mailu environment files
-wget 'https://setup.mailu.io/2.0/file/'$UUID'/docker-compose.yml' -O docker-compose.yml
-wget 'https://setup.mailu.io/2.0/file/'$UUID'/mailu.env' -O mailu.env
+wget 'https://setup.mailu.io/2.0/file/'$UUID'/docker-compose.yml' -O $WORKING_DIR/docker-compose.tmp
+wget 'https://setup.mailu.io/2.0/file/'$UUID'/mailu.env' -O $WORKING_DIR/mailu.env
 
 # Modify Docker Compose File (requires yq tool)
-yq >/dev/null 2>&1 || { echo "yq tool is not installed. Please install yq (e.g., with 'apt install yq' or 'yum install yq')"; exit 1; }
-
 # Build the yq filter expression
 FILTER=".services.[].dns |= . + [\"$HNS_DNS\"]" 
-FILTER=".services.admin.dns |= . - [\"$HNS_DNS\"]"
+FILTER+=" | .services.admin.dns |= . - [\"$HNS_DNS\"]"
 
 FILTER+=" | .services.front.volumes += [\"$(pwd)/cert.crt:/etc/ssl/cert.crt:ro\", \"$(pwd)/cert.key:/etc/ssl/cert.key:ro\", \"$(pwd)/nginx.conf:/etc/nginx/nginx1.conf:ro\", \"$(pwd)/tls.conf:/etc/nginx/tls1.conf:ro\"]"  # Add volumes for front service
 FILTER+=" | .services.front.command = [\"/bin/sh\", \"-c\", \"/start.py & sleep 20 && cd /etc/nginx/ && rm nginx.conf && cp nginx1.conf nginx.conf && rm tls.conf && cp tls1.conf tls.conf && nginx -s reload && sleep infinity\"]"  # Update front service command
 
-yq -r "$FILTER" docker-compose.yml > docker-compose.yml
+yq -r "$FILTER" $WORKING_DIR/docker-compose.tmp > $WORKING_DIR/docker-compose.yml
 
 echo "Nginx configuration and Docker Compose file modified."
+
+cd $WORKING_DIR
+
+# Run mail server
+docker compose -p mailu up -d
+
+# Create admin user
+docker compose -p mailu exec admin flask mailu admin admin $DOMAIN 1
