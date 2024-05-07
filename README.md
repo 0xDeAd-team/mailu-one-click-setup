@@ -69,7 +69,13 @@
   </ol>
 </details>
 
-<!-- ABOUT THE PROJECT -->
+## Demo
+
+For sample demo mail server. Please visit at: [0xDeAd Mail](https://0xdead.invincibility/) with Guest account, default password is `[our-team-name]@[account-name]`
+
+- `guest1@0xdead.invincibility`
+- `guest2@0xdead.invincibility`
+
 ## About The Project
 
 ### Docker Based One-Click Mailu Mail Server: Simplify Your Email Hosting
