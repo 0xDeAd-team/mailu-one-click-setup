@@ -228,7 +228,7 @@ It took a while for HNSD to finish running. You can ping a Handshake domain to c
    ./setup.sh
    ```
 
-And wait a few seconds. You can get this login web page when your server is ready
+And wait few seconds and the script will do all the rest for you, from get the config file to run the docker compose containers. You can get this login web page when your server is ready
 ![sample](assets/sample.png)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
