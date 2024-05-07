@@ -46,6 +46,9 @@
   <summary>Table of Contents</summary>
   <ol>
     <li>
+      <a href="#demo">Demo</a>
+    </li>
+    <li>
       <a href="#about-the-project">About The Project</a>
       <ul>
         <li><a href="#docker-based-one-click-mailu-mail-server-simplify-your-email-hosting">Docker Based One-Click Mailu Mail Server: Simplify Your Email Hosting</a></li>
