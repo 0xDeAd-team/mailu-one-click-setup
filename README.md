@@ -151,7 +151,7 @@ Handshake allows a limited set of DNS record types on chain.
 
 - Make sure to enable DNSSEC for your domain and Namebase will automaticcaly add 3 DS records
 
-- To use Namebase's nameservers, create an NS record in the blockchain section with a "Name" of "ns1" and a "Value" of "44.231.6.183"
+- To use Namebase's nameservers, create an NS record in the blockchain section with a "Name" of `ns1` and a "Value" of `44.231.6.183`
 
 ![dns-onchain](assets/dns-onchain.png)
 
