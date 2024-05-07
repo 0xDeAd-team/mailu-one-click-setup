@@ -76,6 +76,8 @@ For sample demo mail server. Please visit at: [0xDeAd Mail](https://0xdead.invin
 - `guest1@0xdead.invincibility`
 - `guest2@0xdead.invincibility`
 
+See the [Usage](#usage) below for more detail about E2E encryption and Handshake cross domain mail.
+
 ## About The Project
 
 ### Docker Based One-Click Mailu Mail Server: Simplify Your Email Hosting
@@ -237,9 +239,12 @@ And wait a few seconds. You can get this login web page when your server is read
 ## Usage
 
 - **To send and receive email from others HandShake domain mail servers, both 2 servers need to set up HNSD to resolve DNS.**
+
+With demo website [above](#demo), you can try to send email to `@moon.allinpepetothemoon` mail domain of ToTheMoon team.
 ![Cross Domain Mail](/assets/cross-domain.png)
 
 - **To use E2E encryption, go to webmail client settings and create your PGP keys. Remember that if you want to send encrypted mail for some one, you need to have his public key first to encrypt the mail.**
+
 ![E2E Keys](/assets/e2e-keys.png)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
