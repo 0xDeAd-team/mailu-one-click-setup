@@ -75,6 +75,8 @@ For sample demo mail server. Please visit at: [0xDeAd Mail](https://0xdead.invin
 
 See the [Usage](#usage) below for more detail about E2E encryption and Handshake cross domain mail.
 
+We also have a video demo sending E2E mail between 2 handshake domain [here](https://drive.google.com/file/d/1fvqWvGkawvGN54wGbUslk7f9BBtAujy2/view?usp=sharing).
+
 ## About The Project
 
 ### Docker Based One-Click Mailu Mail Server: Simplify Your Email Hosting
