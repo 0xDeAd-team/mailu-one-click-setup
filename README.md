@@ -162,7 +162,7 @@ Handshake allows a limited set of DNS record types on chain.
 
 ![dns-server](assets/dns-server.png)
 
-- For HTTPS certificate validation, add TLSA record for your domain
+- For HTTPS certificate validation, add a TLSA record for your domain (you will get the TLSA value after running the script)
 
 ![dns-tlsa](assets/dns-tlsa.png)
 
